@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cicd-postgres
+    environment:
+      POSTGRES_DB: cicd_healing
+      POSTGRES_USER: cicd_user
+      POSTGRES_PASSWORD: secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cicd_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - healing_network
+
+  # Redis for caching and queuing
+  redis:
+    image: redis:7-alpine
+    container_name: cicd-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - healing_network
+      
+  redis-exporter:
+    image: oliver006/redis_exporter
+    command:
+      - '--redis.addr=redis://redis:6379'
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+
+
+  # Pipeline Monitor Service (FastAPI)
+  pipeline-monitor:
+    build:
+      context: ./pipeline-monitor
+      dockerfile: Dockerfile
+    container_name: pipeline-monitor
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://cicd_user:secure_password@postgres:5432/cicd_healing
+      - REDIS_URL=redis://redis:6379/0
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./pipeline-monitor:/app
+      - ./ml-models:/app/ml-models
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - healing_network
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - healing_network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - healing_network
+
+  # Demo Application
+  demo-app:
+    build:
+      context: ./demo-app
+      dockerfile: Dockerfile
+    container_name: demo-app
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://cicd_user:secure_password@postgres:5432/cicd_healing
+    depends_on:
+      - postgres
+    networks:
+      - healing_network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - pipeline-monitor
+      - grafana
+      - demo-app
+    networks:
+      - healing_network
+
+  # ML Training Service (runs periodically)
+  ml-trainer:
+    build:
+      context: ./pipeline-monitor
+      dockerfile: Dockerfile
+    container_name: ml-trainer
+    environment:
+      - DATABASE_URL=postgresql://cicd_user:secure_password@postgres:5432/cicd_healing
+    depends_on:
+      - postgres
+    volumes:
+      - ./ml-models:/app/ml-models
+    command: python ml-models/train_predictor.py
+    networks:
+      - healing_network
+    profiles:
+      - training  # Only run when explicitly specified
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  healing_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+

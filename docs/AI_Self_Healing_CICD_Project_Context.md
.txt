@@ -1,0 +1,261 @@
+AI Self-Healing CI/CD Pipeline — Project Memory File
+
+Author: ChatGPT (with Bala Vardhan Kumar)
+Purpose: Persistent project context to restore full understanding if chat history is lost
+Last Stable State: Pipeline, metrics, Grafana, ML models running successfully via Docker
+
+1️⃣ Project Vision (VERY IMPORTANT)
+
+This project is NOT a static CI/CD app.
+
+It is a generic AI-powered Self-Healing CI/CD backend pipeline that can work with ANY application.
+
+Core Idea
+
+Applications are deployed via GitHub Actions
+
+CI/CD failures happen (intentionally or naturally)
+
+This pipeline:
+
+Detects failures
+
+Predicts failure risk using ML
+
+Analyzes logs
+
+Applies auto-healing actions
+
+Re-runs pipeline
+
+Exposes metrics & health dashboards
+
+Each new app → can have its own trained ML model.
+
+2️⃣ What Is Already COMPLETED ✅
+✔ Infrastructure
+
+Docker Compose–based microservice architecture
+
+Services running successfully:
+
+pipeline-monitor (FastAPI)
+
+demo-app (FastAPI test app)
+
+postgres
+
+redis
+
+prometheus
+
+grafana
+
+nginx
+
+✔ ML System
+
+Trained ML models stored in:
+
+ai-healing-cicd-fixed/models/
+  ├── failure_predictor.pkl
+  ├── healing_predictor.pkl
+  ├── scaler.pkl
+  ├── metadata.pkl
+
+
+Failure prediction model works
+
+Healing model uses DummyClassifier when only one class exists
+
+Models load correctly inside Docker
+
+✔ Pipeline Monitor (Backend Brain)
+
+FastAPI service
+
+Endpoints working:
+
+/health
+
+/predict
+
+/metrics
+
+GitHub Actions monitoring loop implemented
+
+Prometheus metrics exposed correctly
+
+Redis + DB connectivity working
+
+✔ Observability
+
+Prometheus scrapes:
+
+pipeline-monitor
+
+demo-app
+
+redis-exporter
+
+Grafana running and dashboards accessible
+
+Metrics visible (UP state achieved)
+
+3️⃣ Current Folder Structure (FINAL & CORRECT)
+ai-healing-cicd/
+├── docker-compose.yml
+├── .env
+│
+├── pipeline-monitor/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py
+│       ├── ml_predictor.py
+│       ├── healing_engine.py
+│       ├── github_monitor.py
+│       └── models.py
+│
+├── ml-models/
+│   ├── train_predictor.py
+│   └── models/
+│
+├── demo-app/
+│   ├── Dockerfile
+│   └── app.py
+│
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/
+│       ├── dashboards/
+│       └── datasources/
+│
+├── scripts/
+│   ├── setup.sh
+│   ├── init_db.sql
+│   └── test_healing.sh
+
+4️⃣ What the Pipeline ACTUALLY Does
+During GitHub Actions execution:
+
+GitHub workflow runs (build/test/deploy)
+
+Workflow fails (e.g.):
+
+flaky tests
+
+dependency version error
+
+package install failure
+
+Pipeline Monitor:
+
+Fetches workflow + logs
+
+Extracts features
+
+Predicts failure risk (ML)
+
+Healing Engine:
+
+Matches known failure patterns
+
+Applies fixes:
+
+retry tests
+
+pin dependency versions
+
+clear cache
+
+reinstall packages
+
+Pipeline re-runs
+
+Results + metrics updated
+
+Grafana shows:
+
+pipeline health
+
+failure rate
+
+healing success
+
+5️⃣ What Is NOT Done Yet (NEXT STEPS 🚀)
+🔜 Step 1 — GitHub Actions Integration (CRITICAL)
+
+Create intentional failing workflows
+
+Examples:
+
+wrong Python version
+
+missing dependency
+
+flaky test
+
+Workflow must:
+
+fail first
+
+allow pipeline-monitor to react
+
+🔜 Step 2 — Healing Actions That Modify Code
+
+Auto-commit fixes:
+
+requirements.txt
+
+test retries
+
+workflow YAML fixes
+
+Push changes back to GitHub repo
+
+🔜 Step 3 — Multi-App Support
+
+Each app has:
+
+its own ML model
+
+its own failure patterns
+
+Pipeline Monitor selects model dynamically
+
+🔜 Step 4 — Advanced Grafana Dashboard
+
+Panels:
+
+Failure prediction probability
+
+Healing success rate
+
+Mean time to recovery (MTTR)
+
+CI/CD reliability score
+
+6️⃣ Important Notes for Future ChatGPT
+
+If this file is shared again:
+
+The project is already running
+
+The user does not need basic Docker help
+
+Focus ONLY on:
+
+GitHub Actions workflows
+
+Healing logic improvements
+
+ML feature engineering
+
+Dashboard analytics
+
+This is a Final Year / Research-grade project
+
+7️⃣ One-Line Resume Summary
+
+Built an AI-powered self-healing CI/CD pipeline using FastAPI, Docker, Prometheus, Grafana, and Machine Learning to automatically detect, predict, and remediate CI/CD failures across multiple applications.

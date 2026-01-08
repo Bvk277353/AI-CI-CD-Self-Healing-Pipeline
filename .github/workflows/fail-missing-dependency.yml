@@ -1,0 +1,32 @@
+name: CI Failure - Missing Dependency
+
+on:
+  workflow_dispatch:
+
+jobs:
+  broken-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install broken dependency
+        run: |
+          pip install totally_fake_package_123
+
+      - name: Notify Pipeline Monitor
+        if: failure()
+        run: |
+          curl -X POST http://YOUR_PIPELINE_MONITOR_IP:8000/predict \
+          -H "Content-Type: application/json" \
+          -d '{
+            "error_type": "missing_dependency",
+            "error_message": "ModuleNotFoundError: totally_fake_package_123",
+            "dependency_changes": 1
+          }'

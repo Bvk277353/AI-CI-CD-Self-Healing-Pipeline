@@ -1,0 +1,65 @@
+ai-healing-cicd/
+├── .env                          # Environment variables
+├── .gitignore
+├── docker-compose.yml            # All services configuration
+├── README.md
+│
+├── pipeline-monitor/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py              # FastAPI application
+│   │   ├── models.py            # Database models
+│   │   ├── github_monitor.py   # GitHub API integration
+│   │   ├── healing_engine.py   # Self-healing logic
+│   │   └── ml_predictor.py     # ML prediction
+│   └── config.yaml
+│
+├── ml-models/
+│   ├── train_predictor.py       # Model training script
+│   ├── failure_patterns.py
+│   ├── requirements.txt
+│   └── models/                  # Saved models directory
+│       ├── failure_model.pkl
+│       ├── healing_model.pkl
+│       └── scaler.pkl
+│
+├── demo-app/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app.py                   # Demo FastAPI app
+│   ├── tests/
+│   │   ├── test_app.py
+│   │   ├── test_api.py
+│   │   └── test_integration.py
+│   └── README.md
+│
+├── .github/workflows/
+│   └── self-healing-pipeline.yml
+│
+├── kubernetes/
+│   ├── namespace.yaml
+│   ├── pipeline-monitor-deployment.yaml
+│   ├── postgres-deployment.yaml
+│   ├── redis-deployment.yaml
+│   ├── grafana-deployment.yaml
+│   └── ingress.yaml
+│
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/
+│       ├── dashboards/
+│       │   └── pipeline-dashboard.json
+│       └── datasources/
+│           └── prometheus.yaml
+│
+├── nginx/
+│   ├── nginx.conf
+│   └── ssl/
+│
+└── scripts/
+    ├── setup.sh                 # Complete setup script
+    ├── init_db.sql             # Database schema
+    ├── deploy.sh               # Deployment script
+    └── test_healing.sh         # Test healing scenarios

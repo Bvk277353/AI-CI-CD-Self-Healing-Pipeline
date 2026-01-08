@@ -1,0 +1,451 @@
+name: Self-Healing CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.9'
+  HEALING_API_URL: ${{ secrets.HEALING_API_URL }}
+  MONITORING_ENABLED: true
+
+jobs:
+  # Pre-flight checks and failure prediction
+  pre_flight:
+    name: Pre-flight Analysis
+    runs-on: ubuntu-latest
+    outputs:
+      failure_risk: ${{ steps.predict.outputs.risk_level }}
+      should_proceed: ${{ steps.predict.outputs.should_proceed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Analyze commit
+        id: analyze
+        run: |
+          FILES_CHANGED=$(git diff --name-only HEAD~1 HEAD | wc -l)
+          LINES_CHANGED=$(git diff --shortstat HEAD~1 HEAD | grep -oP '\d+(?= insertion)' || echo 0)
+          DEPENDENCY_CHANGED=$(git diff HEAD~1 HEAD --name-only | grep -E 'requirements.txt|package.json|pom.xml' | wc -l)
+          
+          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
+          echo "lines_changed=$LINES_CHANGED" >> $GITHUB_OUTPUT
+          echo "dependency_changed=$DEPENDENCY_CHANGED" >> $GITHUB_OUTPUT
+      
+      - name: Predict failure risk
+        id: predict
+        run: |
+          # Call healing API to predict failure
+          RISK=$(curl -s -X POST "$HEALING_API_URL/predict" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "workflow_run_id": "${{ github.run_id }}",
+              "files_changed": ${{ steps.analyze.outputs.files_changed }},
+              "lines_changed": ${{ steps.analyze.outputs.lines_changed }},
+              "dependency_changed": ${{ steps.analyze.outputs.dependency_changed }},
+              "author": "${{ github.actor }}",
+              "branch": "${{ github.ref_name }}"
+            }' | jq -r '.risk_level')
+          
+          echo "risk_level=$RISK" >> $GITHUB_OUTPUT
+          echo "should_proceed=true" >> $GITHUB_OUTPUT
+          
+          if [ "$RISK" = "very_high" ]; then
+            echo "⚠️ High failure risk detected!"
+          fi
+
+  # Build and test with auto-healing
+  build_and_test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: pre_flight
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        id: install_deps
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      
+      - name: Auto-heal dependency issues
+        if: steps.install_deps.outcome == 'failure'
+        run: |
+          echo "🔧 Dependency installation failed, triggering auto-heal..."
+          
+          # Send failure to healing API
+          curl -X POST "$HEALING_API_URL/heal" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "error_type": "missing_dependency",
+              "workflow_run": {
+                "id": "${{ github.run_id }}",
+                "head_branch": "${{ github.ref_name }}",
+                "head_sha": "${{ github.sha }}"
+              }
+            }'
+          
+          echo "⏳ Healing in progress..."
+          sleep 30  # Wait for auto-heal to push fix
+          
+          # Pull latest changes (with the fix)
+          git pull origin ${{ github.ref_name }}
+          
+          # Retry installation
+          pip install -r requirements.txt
+      
+      - name: Run linting
+        id: lint
+        continue-on-error: true
+        run: |
+          pip install flake8 pylint
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          pylint **/*.py --exit-zero
+      
+      - name: Run tests
+        id: test
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          pip install pytest pytest-cov pytest-timeout pytest-rerunfailures
+          pytest tests/ --cov=./ --cov-report=xml --timeout=300 -v
+      
+      - name: Auto-heal test failures
+        if: steps.test.outcome == 'failure'
+        run: |
+          echo "🔧 Tests failed, analyzing and attempting auto-heal..."
+          
+          # Extract test logs
+          TEST_LOGS=$(pytest tests/ -v 2>&1 || true)
+          
+          # Send to healing API
+          HEAL_RESPONSE=$(curl -X POST "$HEALING_API_URL/heal" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"run_id\": \"${{ github.run_id }}\",
+              \"logs\": \"$TEST_LOGS\",
+              \"workflow_run\": {
+                \"id\": \"${{ github.run_id }}\",
+                \"head_branch\": \"${{ github.ref_name }}\"
+              }
+            }")
+          
+          echo "Healing response: $HEAL_RESPONSE"
+          
+          # Check if healing was successful
+          HEALING_SUCCESS=$(echo $HEAL_RESPONSE | jq -r '.success')
+          
+          if [ "$HEALING_SUCCESS" = "true" ]; then
+            echo "✅ Auto-heal successful, pulling changes and retrying..."
+            git pull origin ${{ github.ref_name }}
+            pytest tests/ --cov=./ --cov-report=xml --timeout=300 -v
+          else
+            echo "❌ Auto-heal failed, manual intervention required"
+            exit 1
+          fi
+      
+      - name: Security scan
+        run: |
+          pip install safety bandit
+          safety check --json || true
+          bandit -r . -f json -o bandit-report.json || true
+      
+      - name: Upload test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+      
+      - name: Build artifacts
+        run: |
+          echo "Building application..."
+          # Add your build commands here
+          python -m pip install build
+          python -m build
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: dist/
+
+  # Docker build and push
+  docker_build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push
+        id: docker_build
+        continue-on-error: true
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/app:latest
+            ${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/app:latest
+          cache-to: type=inline
+      
+      - name: Auto-heal Docker build failures
+        if: steps.docker_build.outcome == 'failure'
+        run: |
+          echo "🔧 Docker build failed, attempting auto-heal..."
+          
+          # Notify healing system
+          curl -X POST "$HEALING_API_URL/heal" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "run_id": "${{ github.run_id }}",
+              "error_type": "build_failure",
+              "component": "docker",
+              "workflow_run": {
+                "id": "${{ github.run_id }}",
+                "head_branch": "${{ github.ref_name }}"
+              }
+            }'
+
+  # Deploy with auto-rollback capability
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: docker_build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://your-app.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      
+      - name: Get current deployment
+        id: current_deploy
+        run: |
+          CURRENT_IMAGE=$(kubectl get deployment app -o jsonpath='{.spec.template.spec.containers[0].image}')
+          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
+          echo "📦 Current deployment: $CURRENT_IMAGE"
+      
+      - name: Deploy to Kubernetes
+        id: deploy
+        run: |
+          kubectl set image deployment/app \
+            app=${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
+          
+          kubectl rollout status deployment/app --timeout=5m
+      
+      - name: Health check
+        id: health_check
+        continue-on-error: true
+        run: |
+          echo "🏥 Performing health checks..."
+          sleep 30  # Wait for deployment to stabilize
+          
+          # Check pod status
+          READY_PODS=$(kubectl get deployment app -o jsonpath='{.status.readyReplicas}')
+          DESIRED_PODS=$(kubectl get deployment app -o jsonpath='{.spec.replicas}')
+          
+          if [ "$READY_PODS" != "$DESIRED_PODS" ]; then
+            echo "❌ Health check failed: $READY_PODS/$DESIRED_PODS pods ready"
+            exit 1
+          fi
+          
+          # Check application endpoint
+          APP_URL="https://your-app.com/health"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL)
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Health check failed: HTTP $HTTP_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Health check passed"
+      
+      - name: Auto-rollback on failure
+        if: steps.health_check.outcome == 'failure'
+        run: |
+          echo "🔄 Deployment failed health check, initiating auto-rollback..."
+          
+          # Notify healing system
+          curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}" \
+            -H "Content-Type: application/json"
+          
+          # Rollback to previous image
+          kubectl set image deployment/app \
+            app=${{ steps.current_deploy.outputs.current_image }}
+          
+          kubectl rollout status deployment/app --timeout=3m
+          
+          echo "✅ Rollback complete to ${{ steps.current_deploy.outputs.current_image }}"
+          
+          # Notify team
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "🚨 Deployment failed and was auto-rolled back",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Rollback*\n\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}\nReason: Failed health check\nAction: Rolled back to previous version"
+                  }
+                }
+              ]
+            }'
+          
+          exit 1
+      
+      - name: Monitor deployment
+        run: |
+          echo "📊 Monitoring deployment for 2 minutes..."
+          
+          for i in {1..12}; do
+            ERROR_RATE=$(kubectl logs -l app=app --tail=100 | grep -i error | wc -l)
+            echo "Error count: $ERROR_RATE"
+            
+            if [ "$ERROR_RATE" -gt 10 ]; then
+              echo "⚠️ High error rate detected!"
+              
+              # Trigger auto-rollback
+              curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}"
+              
+              kubectl set image deployment/app \
+                app=${{ steps.current_deploy.outputs.current_image }}
+              
+              echo "🔄 Auto-rollback triggered due to high error rate"
+              exit 1
+            fi
+            
+            sleep 10
+          done
+          
+          echo "✅ Deployment stable"
+
+  # Notification and metrics
+  notify:
+    name: Notify & Update Metrics
+    runs-on: ubuntu-latest
+    needs: [build_and_test, docker_build, deploy]
+    if: always()
+    
+    steps:
+      - name: Send metrics to monitoring
+        run: |
+          PIPELINE_STATUS="${{ needs.deploy.result }}"
+          
+          curl -X POST "$HEALING_API_URL/webhook/github" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "action": "completed",
+              "workflow_run": {
+                "id": "${{ github.run_id }}",
+                "status": "completed",
+                "conclusion": "'$PIPELINE_STATUS'",
+                "created_at": "${{ github.event.head_commit.timestamp }}",
+                "updated_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+              },
+              "repository": {
+                "full_name": "${{ github.repository }}"
+              }
+            }'
+      
+      - name: Slack notification
+        if: always()
+        run: |
+          STATUS="${{ needs.deploy.result }}"
+          EMOJI="✅"
+          COLOR="good"
+          
+          if [ "$STATUS" = "failure" ]; then
+            EMOJI="❌"
+            COLOR="danger"
+          fi
+          
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "attachments": [
+                {
+                  "color": "'$COLOR'",
+                  "title": "'$EMOJI' Pipeline '$STATUS'",
+                  "fields": [
+                    {
+                      "title": "Repository",
+                      "value": "${{ github.repository }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Author",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Commit",
+                      "value": "`${{ github.sha }}` ",
+                      "short": true
+                    }
+                  ],
+                  "footer": "Self-Healing CI/CD",
+                  "ts": '$(date +%s)'
+                }
+              ]
+            }'
+
+  # Cleanup old workflow runs
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    if: always()
+    needs: notify
+    
+    steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 30
+          keep_minimum_runs: 10

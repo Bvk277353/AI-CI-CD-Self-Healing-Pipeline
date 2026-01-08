@@ -1,0 +1,32 @@
+name: CI Failure - Version Conflict
+
+on:
+  workflow_dispatch:
+
+jobs:
+  version-conflict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install conflicting versions
+        run: |
+          pip install numpy==1.18.0 pandas==2.2.0
+
+      - name: Notify Pipeline Monitor
+        if: failure()
+        run: |
+          curl -X POST http://<PIPELINE_MONITOR_PUBLIC_URL>/predict \
+          -H "Content-Type: application/json" \
+          -d '{
+            "error_type": "version_conflict",
+            "error_message": "Incompatible dependency versions"
+          }'
+

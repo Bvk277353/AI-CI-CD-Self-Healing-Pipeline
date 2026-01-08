@@ -1,0 +1,190 @@
+# AI-Powered Self-Healing CI/CD Pipeline Configuration
+
+# Application Settings
+app:
+  name: "AI Self-Healing CI/CD Pipeline"
+  version: "1.0.0"
+  debug: false
+  host: "0.0.0.0"
+  port: 8000
+
+# Database Configuration
+database:
+  url: "${DATABASE_URL}"
+  pool_size: 10
+  max_overflow: 20
+  echo: false
+  pool_pre_ping: true
+
+# Redis Configuration
+redis:
+  url: "${REDIS_URL}"
+  decode_responses: true
+  max_connections: 50
+
+# GitHub Configuration
+github:
+  token: "${GITHUB_TOKEN}"
+  repository: "${GITHUB_REPO}"
+  api_timeout: 30
+  max_retries: 3
+
+# ML Model Configuration
+ml:
+  model_path: "ml-models/models/"
+  retrain_interval_hours: 168  # 7 days
+  prediction_threshold: 0.7
+  min_training_samples: 100
+  features:
+    - build_duration_avg
+    - test_count
+    - changed_files
+    - commit_size
+    - hour_of_day
+    - day_of_week
+    - previous_failures
+    - dependency_changes
+    - code_complexity
+    - test_coverage
+    - author_failure_rate
+    - branch_age_days
+
+# Healing Engine Configuration
+healing:
+  enabled: true
+  max_attempts: 3
+  retry_delay_seconds: 30
+  auto_commit: true
+  create_pull_request: false  # Set true to create PRs instead of direct commits
+  
+  # Healing strategies configuration
+  strategies:
+    missing_dependency:
+      enabled: true
+      confidence_threshold: 0.8
+      timeout_seconds: 120
+    
+    test_timeout:
+      enabled: true
+      default_timeout: 300
+      max_timeout: 600
+    
+    flaky_test:
+      enabled: true
+      retry_count: 3
+      retry_delay: 1
+    
+    build_failure:
+      enabled: true
+      clear_cache: true
+    
+    deployment_crash:
+      enabled: true
+      rollback_timeout: 180
+    
+    resource_limit:
+      enabled: true
+      increase_factor: 1.5
+    
+    network_timeout:
+      enabled: true
+      retry_count: 3
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  metrics_retention_days: 90
+  
+  prometheus:
+    enabled: true
+    port: 9090
+  
+  grafana:
+    enabled: true
+    port: 3000
+    admin_user: "admin"
+    admin_password: "${GRAFANA_PASSWORD:-admin}"
+
+# Notifications Configuration
+notifications:
+  slack:
+    enabled: true
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    notify_on_failure: true
+    notify_on_healing_success: true
+    notify_on_healing_failure: true
+  
+  email:
+    enabled: false
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    from_email: "cicd@example.com"
+    to_emails:
+      - "team@example.com"
+
+# Security Configuration
+security:
+  secret_key: "${SECRET_KEY}"
+  algorithm: "HS256"
+  access_token_expire_minutes: 30
+  
+  # Secret scanning
+  scan_for_secrets: true
+  secret_patterns:
+    - "password"
+    - "api_key"
+    - "secret"
+    - "token"
+  
+  # Dependency scanning
+  vulnerability_scan: true
+  fail_on_critical: true
+
+# Performance Configuration
+performance:
+  max_concurrent_healings: 5
+  task_queue_size: 100
+  worker_threads: 4
+  request_timeout: 60
+
+# Logging Configuration
+logging:
+  level: "${LOG_LEVEL:-INFO}"
+  format: "json"
+  output: "stdout"
+  
+  # Log retention
+  retention_days: 30
+  
+  # Log files
+  files:
+    app: "logs/app.log"
+    healing: "logs/healing.log"
+    errors: "logs/errors.log"
+
+# Kubernetes Configuration (for deployment)
+kubernetes:
+  enabled: false
+  namespace: "healing-cicd"
+  rollback_timeout: 300
+  health_check_interval: 30
+
+# Feature Flags
+features:
+  predictive_healing: true
+  auto_rollback: true
+  cost_optimization: true
+  advanced_analytics: true
+  multi_repo_support: false
+
+# Rate Limiting
+rate_limit:
+  enabled: true
+  requests_per_minute: 100
+  burst: 20
+
+# Data Cleanup
+cleanup:
+  enabled: true
+  retention_days: 90
+  cleanup_interval_hours: 24

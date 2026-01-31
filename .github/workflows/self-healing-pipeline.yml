@@ -137,16 +137,20 @@ jobs:
           TEST_LOGS=$(pytest tests/ -v 2>&1 || true)
           
           # Send to healing API
-          HEAL_RESPONSE=$(curl -X POST "$HEALING_API_URL/heal" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"run_id\": \"${{ github.run_id }}\",
-              \"logs\": \"$TEST_LOGS\",
-              \"workflow_run\": {
-                \"id\": \"${{ github.run_id }}\",
-                \"head_branch\": \"${{ github.ref_name }}\"
-              }
-            }")
+          - name: Auto-heal on failure
+            if: failure()
+            run: |
+              echo "🔧 Tests failed, running local auto-heal logic..."
+
+              pytest tests/ -v || true
+
+              python scripts/auto_heal.py \
+                --logs-file pytest.log \
+                --run-id "${{ github.run_id }}"
+
+              echo "🔁 Retrying tests after healing..."
+              pytest tests/ -v --cov=./ --cov-report=xml
+
           
           echo "Healing response: $HEAL_RESPONSE"
           

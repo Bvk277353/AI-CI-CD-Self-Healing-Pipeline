@@ -2,7 +2,9 @@
 AI-Powered Self-Healing CI/CD Pipeline Monitor
 Main FastAPI Application (patched with Prometheus metrics)
 """
-
+from fastapi.templating import Jinja2Templates
+from fastapi.requests import Request
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -31,6 +33,8 @@ app = FastAPI(
     description="AI-powered pipeline monitoring and auto-healing system",
     version="1.0.0"
 )
+templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Enable Prometheus instrumentation BEFORE startup
 try:
@@ -75,6 +79,10 @@ class HealthCheck(BaseModel):
     timestamp: datetime
     services: Dict[str, bool]
 
+
+
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
@@ -95,6 +103,15 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     await db.disconnect()
     logger.info("System shutdown complete")
+
+
+@app.get("/dashboard")
+async def dashboard(request: Request):
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request}
+    )
+
 
 @app.get("/", response_model=HealthCheck)
 async def health_check():
@@ -216,6 +233,22 @@ async def handle_pipeline_failure(run_id: str, workflow_run: Dict):
     
     except Exception as e:
         logger.error(f"Error handling pipeline failure: {e}")
+
+
+@app.post("/auto-heal")
+async def auto_heal(payload: dict):
+    logs = payload.get("logs", "")
+    app_name = payload.get("app_name", "unknown")
+
+    analysis = await healing_engine.analyze_failure(logs)
+    healing_result = await healing_engine.heal(analysis)
+
+    return {
+        "app": app_name,
+        "analysis": analysis,
+        "action_taken": healing_result
+    }
+
 
 async def monitor_pipelines():
     # ---- Replace the existing monitor_pipelines() with this code ----

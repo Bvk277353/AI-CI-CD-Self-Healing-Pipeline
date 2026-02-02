@@ -136,32 +136,26 @@ jobs:
       
       - name: Auto-heal on test failure
         if: failure()
+        env:
+          HEALING_API_URL: ${{ secrets.HEALING_API_URL }}
         run: |
-          echo "🔧 Tests failed, running auto-heal logic..."
+          echo "🔧 Tests failed, sending logs to self-healing pipeline..."
 
-          pytest tests/ -v | tee pytest.log || true
+          pytest tests/ -v > pytest.log || true
 
-          python scripts/auto_heal.py \
-            --logs-file pytest.log \
-            --run-id "${{ github.run_id }}"
+          echo "Sending logs to pipeline monitor..."
+          curl -X POST "$HEALING_API_URL/auto-heal" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg logs "$(cat pytest.log)" \
+              --arg run_id "${{ github.run_id }}" \
+              '{
+                run_id: $run_id,
+                logs: $logs
+              }')"
 
           echo "🔁 Retrying tests after healing..."
-          pytest tests/ -v --cov=./ --cov-report=xml
-
-          
-          echo "Healing response: $HEAL_RESPONSE"
-          
-          # Check if healing was successful
-          HEALING_SUCCESS=$(echo $HEAL_RESPONSE | jq -r '.success')
-          
-          if [ "$HEALING_SUCCESS" = "true" ]; then
-            echo "✅ Auto-heal successful, pulling changes and retrying..."
-            git pull origin ${{ github.ref_name }}
-            pytest tests/ --cov=./ --cov-report=xml --timeout=300 -v
-          else
-            echo "❌ Auto-heal failed, manual intervention required"
-            exit 1
-          fi
+          pytest tests/ -v
       
       - name: Security scan
         run: |

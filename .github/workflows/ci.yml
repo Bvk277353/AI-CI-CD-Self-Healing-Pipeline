@@ -22,7 +22,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r pipeline-monitor/requirements.txt
+          pip install -r demo-app/requirements.txt
+          pip install -r ml-models/requirements.txt
 
       - name: Run tests
         run: |

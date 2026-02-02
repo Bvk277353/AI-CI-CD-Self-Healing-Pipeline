@@ -82,7 +82,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+            pip install -r pipeline-monitor/requirements.txt
+            pip install -r demo-app/requirements.txt
+            pip install -r ml-models/requirements.txt
+
           fi
       
       - name: Auto-heal dependency issues
@@ -110,7 +113,10 @@ jobs:
           git pull origin ${{ github.ref_name }}
           
           # Retry installation
-          pip install -r requirements.txt
+          pip install -r pipeline-monitor/requirements.txt
+          pip install -r demo-app/requirements.txt
+          pip install -r ml-models/requirements.txt
+
       
       - name: Run linting
         id: lint

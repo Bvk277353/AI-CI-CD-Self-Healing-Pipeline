@@ -30,19 +30,18 @@ jobs:
         run: |
           pytest || true
 
-      - name: Notify Pipeline Monitor
-        if: always()
+      - name: Auto-heal on test failure
+        if: failure()
         run: |
-          curl -X POST http://YOUR_PIPELINE_MONITOR_IP:8000/predict \
-          -H "Content-Type: application/json" \
-          -d '{
-            "commit_size": 120,
-            "test_count": 25,
-            "changed_files": 5,
-            "dependency_changes": 1,
-            "previous_failures": 0,
-            "code_complexity": 8,
-            "test_coverage": 78,
-            "hour_of_day": 10,
-            "day_of_week": 2
-          }'
+          echo "🔧 Tests failed, running local auto-heal logic..."
+
+          pytest tests/ -v > pytest.log || true
+
+          echo "Running self-healing script..."
+          python scripts/auto_heal.py \
+            --logs-file pytest.log \
+            --run-id "${{ github.run_id }}"
+
+          echo "🔁 Retrying tests after healing..."
+          pytest tests/ -v --cov=./ --cov-report=xml
+

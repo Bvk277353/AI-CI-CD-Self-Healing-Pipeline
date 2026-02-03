@@ -249,11 +249,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
       
-      - name: Configure kubectl
-        uses: azure/k8s-set-context@v3
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      - name: Set up Kubernetes config
+        run: |
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > kubeconfig.yaml
+          mkdir -p ~/.kube
+          mv kubeconfig.yaml ~/.kube/config
+
+      - name: Verify cluster access
+        run: kubectl get nodes
+
       
       - name: Get current deployment
         id: current_deploy
@@ -267,8 +271,14 @@ jobs:
         run: |
           kubectl set image deployment/app \
             app=${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
-          
+
           kubectl rollout status deployment/app --timeout=5m
+
+      - name: Deploy to Kubernetes2
+        run: |
+          kubectl apply -f kubernetes/
+          kubectl rollout status deployment/pipeline-monitor
+
       
       - name: Health check
         id: health_check

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pipeline-monitor"
+version = "0.1.0"
+description = "AI-powered self-healing CI/CD pipeline monitor"
+authors = [
+  { name="Bala Vardhan Kumar Doupati", email="dbvardhankumar@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "aiohttp",
+  "prometheus-fastapi-instrumentator",
+  "prometheus-client",
+  "scikit-learn",
+  "joblib",
+  "numpy",
+  "pandas"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

@@ -169,12 +169,13 @@ jobs:
           file: ./coverage.xml
           fail_ci_if_error: false
       
-      - name: Build artifacts
+      - name: Build pipeline-monitor package
         run: |
           echo "Building application..."
-          # Add your build commands here
-          python -m pip install build
+          cd pipeline-monitor
+          python -m pip install --upgrade pip build
           python -m build
+
       
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

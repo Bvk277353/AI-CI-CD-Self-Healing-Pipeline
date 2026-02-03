@@ -208,7 +208,8 @@ jobs:
         continue-on-error: true
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: ./pipeline-monitor
+          file: ./pipeline-monitor/Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/app:latest

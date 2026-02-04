@@ -85,7 +85,6 @@ jobs:
             pip install -r pipeline-monitor/requirements.txt
             pip install -r demo-app/requirements.txt
             pip install -r ml-models/requirements.txt
-
           fi
       
       - name: Auto-heal dependency issues
@@ -117,7 +116,6 @@ jobs:
           pip install -r demo-app/requirements.txt
           pip install -r ml-models/requirements.txt
 
-      
       - name: Run linting
         id: lint
         continue-on-error: true
@@ -176,7 +174,6 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build
 
-      
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -208,8 +205,7 @@ jobs:
         continue-on-error: true
         uses: docker/build-push-action@v4
         with:
-          context: ./pipeline-monitor
-          file: ./pipeline-monitor/Dockerfile
+          context: .
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/app:latest
@@ -235,138 +231,72 @@ jobs:
               }
             }'
 
-  # Deploy with auto-rollback capability
+  # Deploy (Kubernetes disabled for now – enabled later)
   deploy:
-    name: Deploy to Kubernetes
+    name: Deploy (Kubernetes – skipped)
     runs-on: ubuntu-latest
     needs: docker_build
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://your-app.com
-    
+
+    # ⛔ Kubernetes intentionally disabled
+    if: false
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-      
-      - name: Set up Kubernetes config
+      - name: Kubernetes deployment skipped
         run: |
-          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > kubeconfig.yaml
-          mkdir -p ~/.kube
-          mv kubeconfig.yaml ~/.kube/config
+          echo "🚫 Kubernetes deployment is currently disabled."
+          echo "ℹ️ Reason: No public cluster / kubeconfig configured yet."
+          echo "✅ CI, self-healing, Docker build completed successfully."
+          echo ""
+          echo "To enable Kubernetes later:"
+          echo "1. Add KUBECONFIG_B64 secret"
+          echo "2. Set if: github.ref == 'refs/heads/main'"
+          echo "3. Restore kubectl steps"
 
-      - name: Verify cluster access
-        run: kubectl get nodes
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
 
-      
       - name: Get current deployment
         id: current_deploy
         run: |
           CURRENT_IMAGE=$(kubectl get deployment app -o jsonpath='{.spec.template.spec.containers[0].image}')
           echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
           echo "📦 Current deployment: $CURRENT_IMAGE"
-      
+
       - name: Deploy to Kubernetes
-        id: deploy
+        id: deploy_k8s
         run: |
           kubectl set image deployment/app \
             app=${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
-
+          
           kubectl rollout status deployment/app --timeout=5m
 
-      - name: Deploy to Kubernetes2
-        run: |
-          kubectl apply -f kubernetes/
-          kubectl rollout status deployment/pipeline-monitor
-
-      
       - name: Health check
         id: health_check
         continue-on-error: true
         run: |
           echo "🏥 Performing health checks..."
-          sleep 30  # Wait for deployment to stabilize
-          
-          # Check pod status
+          sleep 30 
           READY_PODS=$(kubectl get deployment app -o jsonpath='{.status.readyReplicas}')
           DESIRED_PODS=$(kubectl get deployment app -o jsonpath='{.spec.replicas}')
-          
           if [ "$READY_PODS" != "$DESIRED_PODS" ]; then
-            echo "❌ Health check failed: $READY_PODS/$DESIRED_PODS pods ready"
             exit 1
           fi
-          
-          # Check application endpoint
           APP_URL="https://your-app.com/health"
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL)
-          
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Health check failed: HTTP $HTTP_CODE"
             exit 1
           fi
-          
-          echo "✅ Health check passed"
-      
+
       - name: Auto-rollback on failure
         if: steps.health_check.outcome == 'failure'
         run: |
-          echo "🔄 Deployment failed health check, initiating auto-rollback..."
-          
-          # Notify healing system
-          curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}" \
-            -H "Content-Type: application/json"
-          
-          # Rollback to previous image
-          kubectl set image deployment/app \
-            app=${{ steps.current_deploy.outputs.current_image }}
-          
+          echo "🔄 Deployment failed, initiating auto-rollback..."
+          curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}"
+          kubectl set image deployment/app app=${{ steps.current_deploy.outputs.current_image }}
           kubectl rollout status deployment/app --timeout=3m
-          
-          echo "✅ Rollback complete to ${{ steps.current_deploy.outputs.current_image }}"
-          
-          # Notify team
-          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
-            -H 'Content-Type: application/json' \
-            -d '{
-              "text": "🚨 Deployment failed and was auto-rolled back",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Deployment Rollback*\n\nCommit: `${{ github.sha }}`\nAuthor: ${{ github.actor }}\nReason: Failed health check\nAction: Rolled back to previous version"
-                  }
-                }
-              ]
-            }'
-          
-          exit 1
-      
-      - name: Monitor deployment
-        run: |
-          echo "📊 Monitoring deployment for 2 minutes..."
-          
-          for i in {1..12}; do
-            ERROR_RATE=$(kubectl logs -l app=app --tail=100 | grep -i error | wc -l)
-            echo "Error count: $ERROR_RATE"
-            
-            if [ "$ERROR_RATE" -gt 10 ]; then
-              echo "⚠️ High error rate detected!"
-              
-              # Trigger auto-rollback
-              curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}"
-              
-              kubectl set image deployment/app \
-                app=${{ steps.current_deploy.outputs.current_image }}
-              
-              echo "🔄 Auto-rollback triggered due to high error rate"
-              exit 1
-            fi
-            
-            sleep 10
-          done
-          
-          echo "✅ Deployment stable"
 
   # Notification and metrics
   notify:
@@ -378,7 +308,7 @@ jobs:
     steps:
       - name: Send metrics to monitoring
         run: |
-          PIPELINE_STATUS="${{ needs.deploy.result }}"
+          PIPELINE_STATUS="${{ needs.build_and_test.result }}"
           
           curl -X POST "$HEALING_API_URL/webhook/github" \
             -H "Content-Type: application/json" \
@@ -399,7 +329,7 @@ jobs:
       - name: Slack notification
         if: always()
         run: |
-          STATUS="${{ needs.deploy.result }}"
+          STATUS="${{ needs.build_and_test.result }}"
           EMOJI="✅"
           COLOR="good"
           
@@ -428,8 +358,7 @@ jobs:
                     },
                     {
                       "title": "Author",
-                      "value": "${{ github.actor }}",
-                      "short": true
+                      "value": "${{ github.actor }}", short: true
                     },
                     {
                       "title": "Commit",

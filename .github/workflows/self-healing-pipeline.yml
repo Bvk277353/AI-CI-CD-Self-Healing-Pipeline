@@ -236,10 +236,8 @@ jobs:
     name: Deploy (Kubernetes – skipped)
     runs-on: ubuntu-latest
     needs: docker_build
-
     # ⛔ Kubernetes intentionally disabled
     if: false
-
     steps:
       - name: Kubernetes deployment skipped
         run: |
@@ -252,52 +250,6 @@ jobs:
           echo "2. Set if: github.ref == 'refs/heads/main'"
           echo "3. Restore kubectl steps"
 
-      - name: Configure kubectl
-        uses: azure/k8s-set-context@v3
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}
-
-      - name: Get current deployment
-        id: current_deploy
-        run: |
-          CURRENT_IMAGE=$(kubectl get deployment app -o jsonpath='{.spec.template.spec.containers[0].image}')
-          echo "current_image=$CURRENT_IMAGE" >> $GITHUB_OUTPUT
-          echo "📦 Current deployment: $CURRENT_IMAGE"
-
-      - name: Deploy to Kubernetes
-        id: deploy_k8s
-        run: |
-          kubectl set image deployment/app \
-            app=${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
-          
-          kubectl rollout status deployment/app --timeout=5m
-
-      - name: Health check
-        id: health_check
-        continue-on-error: true
-        run: |
-          echo "🏥 Performing health checks..."
-          sleep 30 
-          READY_PODS=$(kubectl get deployment app -o jsonpath='{.status.readyReplicas}')
-          DESIRED_PODS=$(kubectl get deployment app -o jsonpath='{.spec.replicas}')
-          if [ "$READY_PODS" != "$DESIRED_PODS" ]; then
-            exit 1
-          fi
-          APP_URL="https://your-app.com/health"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $APP_URL)
-          if [ "$HTTP_CODE" != "200" ]; then
-            exit 1
-          fi
-
-      - name: Auto-rollback on failure
-        if: steps.health_check.outcome == 'failure'
-        run: |
-          echo "🔄 Deployment failed, initiating auto-rollback..."
-          curl -X POST "$HEALING_API_URL/rollback/${{ github.run_id }}"
-          kubectl set image deployment/app app=${{ steps.current_deploy.outputs.current_image }}
-          kubectl rollout status deployment/app --timeout=3m
-
   # Notification and metrics
   notify:
     name: Notify & Update Metrics
@@ -308,7 +260,7 @@ jobs:
     steps:
       - name: Send metrics to monitoring
         run: |
-          PIPELINE_STATUS="${{ needs.build_and_test.result }}"
+          PIPELINE_STATUS="${{ needs.deploy.result }}"
           
           curl -X POST "$HEALING_API_URL/webhook/github" \
             -H "Content-Type: application/json" \
@@ -329,7 +281,7 @@ jobs:
       - name: Slack notification
         if: always()
         run: |
-          STATUS="${{ needs.build_and_test.result }}"
+          STATUS="${{ needs.deploy.result }}"
           EMOJI="✅"
           COLOR="good"
           
@@ -358,7 +310,8 @@ jobs:
                     },
                     {
                       "title": "Author",
-                      "value": "${{ github.actor }}", short: true
+                      "value": "${{ github.actor }}",
+                      "short": true
                     },
                     {
                       "title": "Commit",

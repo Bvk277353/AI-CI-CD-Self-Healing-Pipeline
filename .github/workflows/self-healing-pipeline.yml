@@ -185,7 +185,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
-          path: dist/
+          path: pipeline-monitor/dist/
 
   # Docker build and push
   docker_build:

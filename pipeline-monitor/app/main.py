@@ -250,9 +250,6 @@ async def auto_heal(payload: dict):
     }
 
 
-async def monitor_pipelines():
-    # ---- Replace the existing monitor_pipelines() with this code ----
-
 last_seen_run = None
 
 async def monitor_pipelines():

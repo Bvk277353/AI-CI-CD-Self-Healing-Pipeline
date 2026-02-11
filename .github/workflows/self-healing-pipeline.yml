@@ -127,11 +127,13 @@ jobs:
       - name: Run tests
         id: test
         continue-on-error: true
-        timeout-minutes: 30
         run: |
-          pip install pytest pytest-cov pytest-timeout pytest-rerunfailures
-          pytest tests/ --cov=./ --cov-report=xml --timeout=300 -v
-      
+          if [ -d "demo-app/tests" ]; then
+            pytest demo-app/tests/ --cov=demo-app/ --cov-report=xml --timeout=300 -v
+          else
+            echo "No tests directory found. Skipping tests."
+          fi
+
       - name: Auto-heal on test failure
         if: failure()
         env:

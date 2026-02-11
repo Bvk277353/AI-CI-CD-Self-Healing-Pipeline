@@ -219,10 +219,7 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/pipeline-monitor:latest
           cache-to: type=inline
 
-
-
       - name: Build & Push Demo App
-        id: docker_build
         continue-on-error: true
         uses: docker/build-push-action@v4
         with:

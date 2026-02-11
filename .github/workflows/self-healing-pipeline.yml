@@ -210,13 +210,31 @@ jobs:
         continue-on-error: true
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: ./pipeline-monitor
+          file: ./pipeline-monitor/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/app:latest
-            ${{ secrets.DOCKER_USERNAME }}/app:${{ github.sha }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/app:latest
+            ${{ secrets.DOCKER_USERNAME }}/pipeline-monitor:latest
+            ${{ secrets.DOCKER_USERNAME }}/pipeline-monitor:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/pipeline-monitor:latest
           cache-to: type=inline
+
+
+
+      - name: Build & Push Demo App
+        id: docker_build
+        continue-on-error: true
+        uses: docker/build-push-action@v4
+        with:
+          context: ./demo-app
+          file: ./demo-app/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/demo-app:latest
+            ${{ secrets.DOCKER_USERNAME }}/demo-app:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/demo-app:latest
+          cache-to: type=inline
+
       
       - name: Auto-heal Docker build failures
         if: steps.docker_build.outcome == 'failure'

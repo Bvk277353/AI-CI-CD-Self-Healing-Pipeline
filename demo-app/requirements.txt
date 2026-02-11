@@ -8,4 +8,4 @@ pytest-rerunfailures==12.0
 httpx==0.25.1
 requests==2.31.0
 prometheus-client
-
+prometheus-fastapi-instrumentator

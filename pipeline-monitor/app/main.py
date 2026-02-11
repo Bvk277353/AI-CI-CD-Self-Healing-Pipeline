@@ -2,6 +2,17 @@
 AI-Powered Self-Healing CI/CD Pipeline Monitor
 Main FastAPI Application (patched with Prometheus metrics)
 """
+import os
+import json
+import traceback
+import asyncio
+import aiohttp
+
+# GitHub config
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_REPO = os.getenv("GITHUB_REPO", "")
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "20"))
+
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
@@ -252,6 +263,17 @@ async def auto_heal(payload: dict):
 
 last_seen_run = None
 
+async def github_get(url: str):
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json()
+
 async def monitor_pipelines():
     """
     Robust background task to continuously monitor recent workflows.
@@ -426,3 +448,4 @@ async def send_early_warning(run: Dict, prediction: Dict):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    

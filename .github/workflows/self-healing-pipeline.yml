@@ -131,6 +131,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r demo-app/requirements.txt
           pip install pytest pytest-cov pytest-timeout pytest-rerunfailures
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/demo-app
+
           if [ -d "demo-app/tests" ]; then
             pytest demo-app/tests/ --cov=demo-app --cov-report=xml --timeout=300 -v
           else
@@ -231,7 +233,6 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/demo-app:${{ github.sha }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/demo-app:latest
           cache-to: type=inline
-
       
       - name: Auto-heal Docker build failures
         if: steps.docker_build.outcome == 'failure'

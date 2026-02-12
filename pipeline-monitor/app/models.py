@@ -120,19 +120,6 @@ class Database:
     async def connect(self):
         """Initialize database connection"""
         try:
-            self.engine = create_engine(
-                self.database_url,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True
-            )
-            self.SessionLocal = sessionmaker(
-                autocommit=False,
-                autoflush=False,
-                bind=self.engine
-            )
-
-        try:
             if self.database_url.startswith("postgres"):
                 self.engine = create_engine(
                     self.database_url,

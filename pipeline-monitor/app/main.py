@@ -26,7 +26,7 @@ import logging
 from .github_monitor import GitHubMonitor
 from .healing_engine import HealingEngine
 from .ml_predictor import FailurePredictor
-from models import Database, PipelineRun, FailureLog, HealingAction
+from .models import Database, PipelineRun, FailureLog, HealingAction
 
 # Metrics (prometheus)
 from .metrics import PIPELINE_RUNS, PIPELINE_SUCCESS, PIPELINE_PRED_CONF
@@ -449,4 +449,5 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
     
+
 

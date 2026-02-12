@@ -112,7 +112,7 @@ class Database:
     def __init__(self):
         self.database_url = os.getenv(
             'DATABASE_URL',
-            'postgresql://cicd_user:secure_password@localhost:5432/cicd_healing'
+            'sqlite:///./local.db'
         )
         self.engine = None
         self.SessionLocal = None

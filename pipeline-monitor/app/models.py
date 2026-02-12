@@ -131,11 +131,33 @@ class Database:
                 autoflush=False,
                 bind=self.engine
             )
-            
+
+        try:
+            if self.database_url.startswith("postgres"):
+                self.engine = create_engine(
+                    self.database_url,
+                    pool_pre_ping=True,
+                    connect_args={"sslmode": "require"}
+                )
+
+            else:
+                # SQLite fallback (local only)
+                self.engine = create_engine(
+                    self.database_url,
+                    connect_args={"check_same_thread": False}
+                )
+
+            self.SessionLocal = sessionmaker(
+                autocommit=False,
+                autoflush=False,
+                bind=self.engine
+            )
+
             # Create tables if they don't exist
             Base.metadata.create_all(bind=self.engine)
-            
+
             logger.info("✅ Database connected successfully")
+
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
             raise

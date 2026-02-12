@@ -23,8 +23,7 @@ from typing import List, Optional, Dict
 import asyncio
 from datetime import datetime
 import logging
-
-from github_monitor import GitHubMonitor
+from app.github_monitor import GitHubMonitor
 from healing_engine import HealingEngine
 from ml_predictor import FailurePredictor
 from models import Database, PipelineRun, FailureLog, HealingAction
@@ -448,4 +447,5 @@ async def send_early_warning(run: Dict, prediction: Dict):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
     

@@ -186,7 +186,11 @@ jobs:
         with:
           name: build-artifacts
           path: pipeline-monitor/dist/
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> fae7c7f (Save local changes before sync)
   # Docker build and push
   docker_build:
     name: Build Docker Image

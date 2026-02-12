@@ -24,5 +24,17 @@ jinja2==3.1.3
 prometheus-fastapi-instrumentator==6.1.0
 sqlalchemy==2.0.25
 joblib==1.3.2
+<<<<<<< HEAD
 
 
+=======
+psycopg2-binary==2.9.9
+aiohttp==3.9.5
+requests==2.31.0
+jinja2==3.1.3
+prometheus-fastapi-instrumentator==6.1.0
+sqlalchemy==2.0.25
+scikit-learn==1.3.2
+joblib==1.3.2
+numpy==1.24.4
+>>>>>>> fae7c7f (Save local changes before sync)

@@ -27,6 +27,11 @@ from .github_monitor import GitHubMonitor
 from .healing_engine import HealingEngine
 from .ml_predictor import FailurePredictor
 from .models import Database, PipelineRun, FailureLog, HealingAction
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> fae7c7f (Save local changes before sync)
 
 # Metrics (prometheus)
 from .metrics import PIPELINE_RUNS, PIPELINE_SUCCESS, PIPELINE_PRED_CONF
@@ -44,7 +49,8 @@ app = FastAPI(
     version="1.0.0"
 )
 templates = Jinja2Templates(directory="app/templates")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+if os.path.isdir("app/static"):
+    app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Enable Prometheus instrumentation BEFORE startup
 try:

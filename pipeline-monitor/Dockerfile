@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY app/ ./app/
 COPY ml-models/ ./ml-models/
+COPY models/ ./models/
+
 
 # Expose port
 EXPOSE 8000

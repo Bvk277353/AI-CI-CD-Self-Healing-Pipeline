@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import os
 import logging
+from sqlalchemy import text
+
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +118,7 @@ class Database:
         )
         self.engine = None
         self.SessionLocal = None
-    
+
     async def connect(self):
         """Initialize database connection"""
         try:
@@ -124,7 +126,6 @@ class Database:
                 self.engine = create_engine(
                     self.database_url,
                     pool_pre_ping=True,
-                    connect_args={"sslmode": "require"}
                 )
 
             else:
@@ -154,17 +155,20 @@ class Database:
         if self.engine:
             self.engine.dispose()
             logger.info("Database connection closed")
-    
+
     async def is_connected(self) -> bool:
         """Check if database is connected"""
         try:
-            if self.engine:
-                with self.engine.connect() as conn:
-                    conn.execute("SELECT 1")
-                return True
-        except:
-            pass
-        return False
+            if not self.engine:
+                return False
+
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            return False    
     
     def get_session(self):
         """Get database session"""

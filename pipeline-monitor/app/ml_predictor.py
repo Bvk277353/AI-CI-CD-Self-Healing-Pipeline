@@ -6,9 +6,10 @@ Loads real trained models from models/
 import numpy as np
 import joblib
 import logging
-from datetime import datetime
 from typing import Dict, List
 import os
+from datetime import datetime, timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,8 @@ class FailurePredictor:
             run.get("code_complexity", 10),
             run.get("test_coverage", 80),
             run.get("author_failure_rate", 0.10),
-            (datetime.now() - created).days
+            (datetime.now(timezone.utc) - created).days
+
         ]
 
     def _healing_features(self, f: Dict) -> List[float]:
